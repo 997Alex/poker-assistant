@@ -68,8 +68,9 @@ class EquityCalculator:
     """Calcola win/tie/lose per ogni giocatore. Gli avversari senza carte note
     vengono pescati dal range assegnato (default: random)."""
 
-    def __init__(self, iterations: int = 30000) -> None:
+    def __init__(self, iterations: int = 30000, seed: int | None = None) -> None:
         self.iterations = iterations
+        self.seed = seed
 
     def run(
         self,
@@ -80,6 +81,8 @@ class EquityCalculator:
         """opponents: lista di dict {'cards': [...]|None, 'range': 'random'|'tight10'|...}.
 
         Ritorna {'hero': {'win':..,'tie':..,'lose':..}, 'opponents': [{...}]}
+        Le carte avversarie in conflitto con carte gia' assegnate vengono
+        ignorate (l'avversario e' trattato come mano sconosciuta dal range).
         """
         if len(hero_cards) != 2:
             return {"hero": None, "opponents": [], "error": "servono 2 carte hero"}
@@ -87,27 +90,38 @@ class EquityCalculator:
         ev = Evaluator()
         hero = [card_to_int(c) for c in hero_cards]
         board = [card_to_int(c) for c in board_cards]
+
+        # dati certi: hero + board devono essere tutte carte distinte
+        known = set(hero) | set(board)
+        if len(known) != len(hero) + len(board):
+            return {"hero": None, "opponents": [], "error": "carte duplicate tra hero e board"}
+
         opp_hands = []
         for o in opponents:
-            if o.get("cards") and len(o["cards"]) == 2:
-                opp_hands.append({"fixed": [card_to_int(c) for c in o["cards"]], "range": None})
+            cards = o.get("cards")
+            if cards and len(cards) == 2:
+                ci = [card_to_int(c) for c in cards]
+                if ci[0] in known or ci[1] in known or ci[0] == ci[1]:
+                    opp_hands.append({"fixed": None, "range": o.get("range", "random")})
+                else:
+                    known.update(ci)
+                    opp_hands.append({"fixed": ci, "range": None})
             else:
                 opp_hands.append({"fixed": None, "range": o.get("range", "random")})
 
-        rng = random.Random()
+        rng = random.Random(self.seed)
         wins = {"win": 0, "tie": 0, "lose": 0}
         opp_res = [{"win": 0, "tie": 0, "lose": 0} for _ in opp_hands]
         total = self.iterations
 
         for _ in range(total):
-            deck = Deck()
-            used = set(hero) | set(board)
+            used = set(known)
             deal = []
             for h in opp_hands:
                 if h["fixed"]:
                     cards = list(h["fixed"])
                 else:
-                    cards = self._sample_range(h["range"], used, deck, rng)
+                    cards = self._sample_range(h["range"], used, rng)
                 deal.append(cards)
                 used.update(cards)
 
@@ -147,22 +161,33 @@ class EquityCalculator:
         return result
 
     @staticmethod
-    def _sample_range(range_name: str, used: set, deck: Deck, rng: random.Random) -> list[int]:
+    def _sample_range(range_name: str, used: set, rng: random.Random) -> list[int]:
+        """Pesca una mano dal range evitando le carte gia' usate.
+
+        Tutta la casualita' passa per 'rng' (seminabile): treys Deck.shuffle
+        userebbe il random globale rendendo il risultato non riproducibile.
+        """
         pool = RANGES.get(range_name)
-        while True:
-            if pool:
+        if pool:
+            while True:
                 hand_class = rng.choice(pool)
                 combos = _combos_for(hand_class)
                 if not combos:
                     continue
                 c1, c2 = rng.choice(combos)
-            else:
-                c1 = deck.draw(1)[0]
-                c2 = deck.draw(1)[0]
-            if c1 not in used and c2 not in used and c1 != c2:
-                used.update((c1, c2))
-                return [c1, c2]
-            # combinazione in conflitto: riprova
+                if c1 not in used and c2 not in used and c1 != c2:
+                    used.update((c1, c2))
+                    return [c1, c2]
+        avail = [c for c in Deck.GetFullDeck() if c not in used]
+        while len(avail) >= 2:
+            c1 = rng.choice(avail)
+            avail.remove(c1)
+            c2 = rng.choice(avail)
+            avail.remove(c2)
+            used.update((c1, c2))
+            return [c1, c2]
+        # mazzo esaurito (non dovrebbe accadere con <20 giocatori)
+        raise ValueError("mazzo insufficiente per il range avversario")
 
 
 def run_async(calc: EquityCalculator, hero_cards, opponents, board_cards, on_done):

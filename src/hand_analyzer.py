@@ -13,6 +13,7 @@ from src.equity import card_to_int
 
 _HAND_IT = {
     "High Card": "Niente — carta alta",
+    "Pair": "Coppia",
     "One Pair": "Coppia",
     "Two Pair": "Doppia coppia",
     "Three of a Kind": "Tris (tre uguali)",
@@ -118,26 +119,35 @@ def _detect_draws(hero: list[int], board: list[int]) -> list[str]:
             draws.append("Colore in arrivo (flush draw)")
             break
 
-    # Scalabili: usa ranghi unici ordinati, con A basso e A alto
+    # Scalabili: usa ranghi unici ordinati, con A basso e A alto.
+    # Calcola i ranghi che completano davvero una scala di 5: sono gli outs reali
+    # del draw. Poi classifica:
+    #   - 4 ranghi consecutivi presenti completabili a entrambi i lati = open-ended
+    #   - due completamenti separati = doppio buco
+    #   - altrimenti = gutshot
     unique = sorted(set(ranks))
     if 14 in unique:  # A basso
         unique.append(1)
-    for start in range(min(unique), max(unique) - 3):
-        needed = [r for r in range(start, start + 4)]
-        have = sum(1 for r in unique if r in needed or (r == 14 and 1 in needed))
-        # count = quante carte di una sequenza di 4 abbiamo
-        seq = [r for r in range(start, start + 4)]
-        present = [r for r in seq if r in ranks or (r == 1 and 14 in ranks)]
-        if len(present) == 3 and len(board) < 5:
-            # gutshot se il quarto completa, OESD se due combo completano
-            gaps = [r for r in seq if r not in present]
-            if len(gaps) == 1:
-                # controllo che sia davvero OESD: i due completamenti
-                outs_seq = [seq[0] - 1, seq[-1] + 1]
-                real = [o for o in outs_seq if 1 <= o <= 14 or (o == 15 and 1 in ranks)]
-                if len(real) >= 2:
-                    draws.append("Scala bilaterale (open-ended)")
-                else:
-                    draws.append("Scala interna (gutshot)")
-            break
+    full = set(unique)
+    completers = []
+    for r in range(1, 15):
+        if r in full:
+            continue
+        cand = full | {r}
+        if any(all(q in cand for q in range(s, s + 5)) for s in range(1, 11)):
+            completers.append(r)
+    if completers and len(board) < 5:
+        # 4 consecutivi presenti => i due esterni sono i completamenti OESD
+        oesd = False
+        for s in range(1, 12):
+            four = set(range(s, s + 4))
+            if four.issubset(full) and (s - 1) in completers and (s + 4) in completers:
+                oesd = True
+                break
+        if oesd:
+            draws.append("Scala bilaterale (open-ended)")
+        elif len(completers) >= 2:
+            draws.append("Scala interna (doppio buco)")
+        else:
+            draws.append("Scala interna (gutshot)")
     return list(dict.fromkeys(draws))

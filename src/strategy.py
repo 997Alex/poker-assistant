@@ -9,46 +9,56 @@ from __future__ import annotations
 _RANK_ORDER = {r: i for i, r in enumerate("23456789TJQKA")}
 
 
+def _rank_suit(card: str) -> tuple[str, str]:
+    """Estrae rank e seme da un nome carta ('10C' -> 'T','C'; 'AS' -> 'A','S')."""
+    if len(card) >= 3 and card[:2] == "10":
+        return "T", card[2]
+    return card[0], card[1]
+
+
 def _hand_tier(cards: list[str]) -> int:
-    """Tier preflop 0..9 (9 = mani premium AA/KK)."""
+    """Tier preflop 0..9 (9 = mani premium AA/KK). I valori usano i ranghi 2..14."""
     if len(cards) != 2:
         return -1
-    r1, r2 = _RANK_ORDER[cards[0][0]], _RANK_ORDER[cards[1][0]]
-    s1, s2 = cards[0][1], cards[1][1]
-    hi, lo = max(r1, r2), min(r1, r2)
-    paired = r1 == r2
+    r1, s1 = _rank_suit(cards[0])
+    r2, s2 = _rank_suit(cards[1])
+    if r1 not in _RANK_ORDER or r2 not in _RANK_ORDER:
+        return -1
+    v1, v2 = _RANK_ORDER[r1] + 2, _RANK_ORDER[r2] + 2  # 2..14
+    hi, lo = max(v1, v2), min(v1, v2)
+    paired = v1 == v2
     suited = s1 == s2
     gap = hi - lo
 
     if paired:
-        if hi >= 11:  # AA KK
+        if hi >= 13:  # AA KK
             return 9
-        if hi >= 9:   # QQ JJ
+        if hi >= 11:  # QQ JJ
             return 8
-        if hi >= 7:   # TT 99
+        if hi >= 9:   # TT 99
             return 7
-        if hi >= 4:   # 88..66
+        if hi >= 6:   # 88..66
             return 6
         return 5      # 55..22
-    if hi == 12 and lo == 11:  # AK
+    if hi == 14 and lo == 13:  # AK
         return 8 if suited else 7
-    if hi == 12 and lo >= 9:   # AQ AJ AT A9
+    if hi == 14 and lo >= 9:   # AQ AJ AT A9
         return 7 if suited else 6
-    if hi == 11 and lo >= 10:  # KQ
+    if hi == 13 and lo == 12:  # KQ
         return 6 if suited else 5
-    if hi == 12 and lo >= 7:   # A8 A7 A6 A5
+    if hi == 14 and lo >= 5:   # A8..A5
         return 6 if suited else 5
-    if hi == 10 and lo >= 9 and gap == 1:  # QJ
+    if hi == 12 and lo == 11:  # QJ
         return 5 if suited else 4
-    if hi == 12 and lo >= 3:   # A4..A2 + A5 (speculative ace)
+    if hi == 14 and lo >= 2:   # A4..A2 (speculative ace)
         return 4 if suited else 3
-    if gap == 1 and hi >= 7:   # JT T9 98 87
+    if gap == 1 and hi >= 9:   # JT T9 98 87
         return 5 if suited else 4
-    if gap <= 3 and hi >= 9:   # connettori/broadway speculativi
+    if gap <= 3 and hi >= 11:  # connettori/broadway speculativi
         return 4 if suited else 3
-    if hi >= 11 and lo >= 9:   # broadway
+    if hi >= 13 and lo >= 11:  # broadway (KJ KT QT)
         return 3 if suited else 2
-    if gap <= 2 and hi >= 5:   # connettori medi
+    if gap <= 2 and hi >= 7:   # connettori medi
         return 3 if suited else 2
     return 1 if suited else 0
 
@@ -108,7 +118,7 @@ class Strategy:
                 "amount": amt,
                 "reason": reason,
             }
-        if tier >= needed - 2 and to_call <= pot * 0.5 + 1:
+        if tier >= needed - 2 and to_call > 0 and to_call <= pot * 0.5 + 1:
             return {"action": "call", "amount": to_call,
                     "reason": "Mano discreta e entrare costa poco: puoi vedere le prossime carte"}
         if tier >= needed - 3 and to_call == 0:
