@@ -1,0 +1,11 @@
+ultralytics==8.4.121
+treys==0.1.8
+mss==10.2.0
+# numpy senza pin: su Python 3.10-3.11 serve numpy 2.4.x, su 3.12+ serve 2.5.x
+numpy>=1.26
+opencv-python==4.10.0.84
+PyQt5==5.15.11
+rich==15.0.0
+# torch CPU: NON aggiornare a build CUDA (rende l'exe enorme e instabile).
+# Su Windows:  pip install torch torchvision --index-url https://download.pytorch.org/whl/cpu
+# Su Linux:    come sopra (già fatto nel venv)

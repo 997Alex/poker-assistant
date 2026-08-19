@@ -1,0 +1,29 @@
+# Python
+__pycache__/
+*.pyc
+*.pyo
+.venv/
+venv/
+.venv-win/
+
+# Build / eseguibili
+build/
+dist/
+*.spec.bak
+
+# Dati utente (profili con coordinate schermo, log, monitor scelto)
+config/
+logs/
+config.json
+
+# Dati di addestramento raccolti localmente
+dataset/
+
+# Modelli esportati (non usati a runtime)
+models/*.onnx
+
+# Ambiente
+.poker-assistant/
+*.log
+.DS_Store
+Thumbs.db
